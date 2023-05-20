@@ -64,6 +64,8 @@ conn.commit()
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name}')
 
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='voice chat'))
+
     # Log the defined ranks
     logger.info('Defined ranks:')
     for rank in RANKS:
