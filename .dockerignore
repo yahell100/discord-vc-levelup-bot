@@ -6,6 +6,9 @@
 .git
 .gitignore
 
+# Exclude enviroment files
+.env
+
 # Exclude editor and IDE files
 .vscode
 *.sublime-project
