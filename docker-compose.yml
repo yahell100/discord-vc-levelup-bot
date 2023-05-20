@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      - TOKEN=your_bot_token
+    env_file:
+      - .env
     volumes:
       - ./bot.db:/app/bot.db
