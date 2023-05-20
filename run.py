@@ -14,6 +14,9 @@ load_dotenv()
 # Get the token from the environment variable or fallback to .env file or default value
 TOKEN = os.getenv('DISCORD_TOKEN', '') or os.getenv('TOKEN', '')
 
+# Opts to allow bot to send notification about promotion
+MSG_USER = os.getenv('MSG_USER', 'False')
+
 # Get ranks from environment variable or fallback to default ranks
 RANKS = os.getenv('RANKS', '[{"name": "Rank 1", "max_hours": 5}, {"name": "Rank 2", "max_hours": 10}, {"name": "Rank 3", "max_hours": 15}]')
 RANKS = json.loads(RANKS)
@@ -121,6 +124,11 @@ async def stop_timer(member):
                     cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
                     conn.commit()
                     logger.info(f'{member.name} has been promoted to {rank["name"]}')
+                    
+                    if MSG_USER:
+                        await member.send(f'Congratulations, you have been promoted to {rank["name"]}!')
+                        logger.info(f'Notified {member.name} about promotion')
+                    
                     break
 
 
