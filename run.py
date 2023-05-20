@@ -109,14 +109,16 @@ async def stop_timer(member):
         conn.commit()
 
         # Check if the user has reached the next rank
-        for rank in RANKS:
-            if current_rank < len(RANKS) - 1 and total_hours >= rank['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
-                next_rank_role = discord.utils.get(member.guild.roles, name=rank['name'])
-                await member.add_roles(next_rank_role)
-                cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
-                conn.commit()
-                logger.info(f'{member.name} has been promoted to {rank["name"]}')
-                break
+        if 'current_rank' in locals():
+            for rank in RANKS:
+                if current_rank < len(RANKS) - 1 and total_hours >= rank['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
+                    next_rank_role = discord.utils.get(member.guild.roles, name=rank['name'])
+                    await member.add_roles(next_rank_role)
+                    cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
+                    conn.commit()
+                    logger.info(f'{member.name} has been promoted to {rank["name"]}')
+                    break
+
 
 # Initialize the voice_timers dictionary
 bot.voice_timers = {}
