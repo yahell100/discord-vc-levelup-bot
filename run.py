@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Configure logger
 logger = logging.getLogger('discord')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Create a console handler and set its formatter
 console_handler = logging.StreamHandler(sys.stdout)
@@ -87,6 +87,7 @@ async def on_voice_state_update(member, before, after):
 async def start_timer(member):
     if member.id not in bot.voice_timers:
         bot.voice_timers[member.id] = datetime.datetime.now()
+        logger.debug(f'Timer started for user: {member.name}')
 
 async def stop_timer(member):
     if member.id in bot.voice_timers:
@@ -107,6 +108,7 @@ async def stop_timer(member):
             cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ?",
                            (total_time, current_rank, member.id))
         conn.commit()
+        logger.debug(f'Timer stopped for user: {member.name}, Duration: {duration}')
 
         # Check if the user has reached the next rank
         if 'current_rank' in locals():
