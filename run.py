@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Configure logger
 logger = logging.getLogger('discord')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Create a console handler and set its formatter
 console_handler = logging.StreamHandler(sys.stdout)
