@@ -6,7 +6,11 @@ import logging
 import sqlite3
 
 TOKEN = 'your_bot_token'
-MAX_HOURS = 5  # The maximum number of hours for the rank
+RANKS = [
+    {'name': 'Rank 1', 'max_hours': 5},
+    {'name': 'Rank 2', 'max_hours': 10},
+    {'name': 'Rank 3', 'max_hours': 15}
+]
 DATABASE_FILE = 'bot.db'  # SQLite database file name
 
 intents = discord.Intents.default()
@@ -28,7 +32,8 @@ cursor = conn.cursor()
 # Create table if it doesn't exist
 cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
                     user_id INTEGER PRIMARY KEY,
-                    total_time INTEGER DEFAULT 0
+                    total_time INTEGER DEFAULT 0,
+                    current_rank INTEGER DEFAULT 0
                 )''')
 conn.commit()
 
@@ -62,43 +67,28 @@ async def stop_timer(member):
         duration = end_time - start_time
         total_hours = duration.total_seconds() / 3600
 
-        if total_hours >= MAX_HOURS:
-            rank_role = discord.utils.get(member.guild.roles, name='Rank Role')
-            await member.add_roles(rank_role)
-
-        # Update the total time in the database
-        cursor.execute("SELECT total_time FROM voice_records WHERE user_id = ?", (member.id,))
+        # Update the total time and current rank in the database
+        cursor.execute("SELECT total_time, current_rank FROM voice_records WHERE user_id = ?", (member.id,))
         row = cursor.fetchone()
         if row is None:
-            cursor.execute("INSERT INTO voice_records (user_id, total_time) VALUES (?, ?)",
-                           (member.id, duration.total_seconds()))
+            cursor.execute("INSERT INTO voice_records (user_id, total_time, current_rank) VALUES (?, ?, ?)",
+                           (member.id, duration.total_seconds(), 0))
         else:
             total_time = row[0] + duration.total_seconds()
-            cursor.execute("UPDATE voice_records SET total_time = ? WHERE user_id = ?",
-                           (total_time, member.id))
+            current_rank = row[1]
+            cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ?",
+                           (total_time, current_rank, member.id))
         conn.commit()
 
-@bot.command()
-async def set_rank_role(ctx, role_name):
-    rank_role = discord.utils.get(ctx.guild.roles, name=role_name)
-    if rank_role:
-        bot.rank_role = rank_role
-        await ctx.send(f"Rank role set as '{role_name}'.")
-    else:
-        await ctx.send(f"Role '{role_name}' not found.")
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return  # Ignore command not found errors
-
-    # Log the error
-    logger.error(f'Command Error: {error}', exc_info=True)
-
-@bot.event
-async def on_error(event, *args, **kwargs):
-    # Log the error
-    logger.error(f'Unhandled Error: {event}', exc_info=True)
+        # Check if the user has reached the next rank
+        for rank in RANKS:
+            if current_rank < len(RANKS) - 1 and total_hours >= rank['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
+                next_rank_role = discord.utils.get(member.guild.roles, name=rank['name'])
+                await member.add_roles(next_rank_role)
+                cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
+                conn.commit()
+                logger.info(f'{member.name} has been promoted to {rank["name"]}')
+                break
 
 # Initialize the voice_timers dictionary
 bot.voice_timers = {}
