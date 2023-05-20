@@ -4,14 +4,21 @@ import datetime
 import asyncio
 import logging
 import sqlite3
+import os
+from dotenv import load_dotenv
 
-TOKEN = 'your_bot_token'
+load_dotenv()
+
+TOKEN = os.getenv('DISCORD_TOKEN')
 RANKS = [
     {'name': 'Rank 1', 'max_hours': 5},
     {'name': 'Rank 2', 'max_hours': 10},
     {'name': 'Rank 3', 'max_hours': 15}
 ]
 DATABASE_FILE = 'bot.db'  # SQLite database file name
+
+if not TOKEN:
+    raise ValueError('DISCORD_TOKEN environment variable is not set.')
 
 intents = discord.Intents.default()
 intents.voice_states = True
