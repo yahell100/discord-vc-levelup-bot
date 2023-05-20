@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv('DISCORD_TOKEN')
-RANKS = [
-    {'name': 'Rank 1', 'max_hours': 5},
-    {'name': 'Rank 2', 'max_hours': 10},
-    {'name': 'Rank 3', 'max_hours': 15}
-]
+# Get the token from the environment variable or fallback to .env file
+TOKEN = os.getenv('DISCORD_TOKEN') or os.getenv('TOKEN')
+
+# Get ranks from environment variable or fallback to default ranks
+RANKS = os.getenv('RANKS', '[{"name": "Rank 1", "max_hours": 5}, {"name": "Rank 2", "max_hours": 10}, {"name": "Rank 3", "max_hours": 15}]')
+RANKS = eval(RANKS)
+
 DATABASE_FILE = 'bot.db'  # SQLite database file name
 
 if not TOKEN:
