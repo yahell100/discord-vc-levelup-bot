@@ -5,21 +5,21 @@ import asyncio
 import logging
 import sqlite3
 import os
+import sys
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
-# Get the token from the environment variable or fallback to .env file
-TOKEN = os.getenv('DISCORD_TOKEN') or os.getenv('TOKEN')
+# Get the token from the environment variable or fallback to .env file or default value
+TOKEN = os.getenv('DISCORD_TOKEN', '') or os.getenv('TOKEN', '')
 
 # Get ranks from environment variable or fallback to default ranks
 RANKS = os.getenv('RANKS', '[{"name": "Rank 1", "max_hours": 5}, {"name": "Rank 2", "max_hours": 10}, {"name": "Rank 3", "max_hours": 15}]')
-RANKS = eval(RANKS)
+RANKS = json.loads(RANKS)
 
-DATABASE_FILE = 'bot.db'  # SQLite database file name
-
-if not TOKEN:
-    raise ValueError('DISCORD_TOKEN environment variable is not set.')
+# Get the database file name from environment variable or fallback to default name
+DATABASE_FILE = os.getenv('DATABASE_FILE', 'bot.db')
 
 intents = discord.Intents.default()
 intents.voice_states = True
@@ -29,13 +29,28 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # Configure logger
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler(filename='bot.log', encoding='utf-8', mode='w')
-handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-logger.addHandler(handler)
+
+# Create a console handler and set its formatter
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+
+# Create a file handler and set its formatter
+file_handler = logging.FileHandler(filename='bot.log', encoding='utf-8', mode='w')
+file_handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+
+# Add both handlers to the logger
+logger.addHandler(console_handler)
+logger.addHandler(file_handler)
+
+# Check if the database file exists, create it if it doesn't
+if not os.path.exists(DATABASE_FILE):
+    conn = sqlite3.connect(DATABASE_FILE)
+    conn.close()
 
 # Create SQLite database connection
 conn = sqlite3.connect(DATABASE_FILE)
 cursor = conn.cursor()
+
 
 # Create table if it doesn't exist
 cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
@@ -48,6 +63,11 @@ conn.commit()
 @bot.event
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name}')
+
+    # Log the defined ranks
+    logger.info('Defined ranks:')
+    for rank in RANKS:
+        logger.info(f'Name: {rank["name"]}, Max Hours: {rank["max_hours"]}')
 
 @bot.event
 async def on_voice_state_update(member, before, after):
