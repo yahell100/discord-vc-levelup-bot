@@ -57,9 +57,11 @@ cursor = conn.cursor()
 
 # Create table if it doesn't exist
 cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
-                    user_id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    server_id INTEGER,
                     total_time INTEGER DEFAULT 0,
-                    current_rank INTEGER DEFAULT 0
+                    current_rank INTEGER DEFAULT 0,
+                    PRIMARY KEY (user_id, server_id)
                 )''')
 conn.commit()
 
@@ -82,38 +84,51 @@ async def on_voice_state_update(member, before, after):
     if after.channel is not None:
         # User joined a voice channel
         if not member.bot:
-            await start_timer(member)
+            for guild in bot.guilds:
+                if member.guild == guild:
+                    await start_timer(member)
+                    break
 
     if before.channel is not None:
         # User left a voice channel
         if not member.bot:
-            await stop_timer(member)
+            for guild in bot.guilds:
+                if member.guild == guild:
+                    await stop_timer(member)
+                    break
 
 async def start_timer(member):
-    if member.id not in bot.voice_timers:
-        bot.voice_timers[member.id] = datetime.datetime.now()
-        logger.debug(f'Timer started for user: {member.name}')
+    server_id = member.guild.id
+    user_id = member.id
+    if server_id not in bot.voice_timers:
+        bot.voice_timers[server_id] = {}
+    bot.voice_timers[server_id][user_id] = datetime.datetime.now()
+    logger.debug(f'Timer started for user: {member.name} in server: {server_id}')
 
 async def stop_timer(member):
-    if member.id in bot.voice_timers:
-        start_time = bot.voice_timers.pop(member.id)
+    server_id = member.guild.id
+    user_id = member.id
+    if server_id in bot.voice_timers and user_id in bot.voice_timers[server_id]:
+        start_time = bot.voice_timers[server_id].pop(user_id)
         end_time = datetime.datetime.now()
         duration = end_time - start_time
         total_hours = duration.total_seconds() / 3600
 
         # Update the total time and current rank in the database
-        cursor.execute("SELECT total_time, current_rank FROM voice_records WHERE user_id = ?", (member.id,))
+        cursor.execute("SELECT total_time, current_rank FROM voice_records WHERE user_id = ? AND server_id = ?",
+                       (user_id, server_id))
         row = cursor.fetchone()
         if row is None:
-            cursor.execute("INSERT INTO voice_records (user_id, total_time, current_rank) VALUES (?, ?, ?)",
-                           (member.id, duration.total_seconds(), 0))
+            cursor.execute("INSERT INTO voice_records (user_id, server_id, total_time, current_rank) VALUES (?, ?, ?, ?)",
+                           (user_id, server_id, duration.total_seconds(), 0))
         else:
             total_time = row[0] + duration.total_seconds()
             current_rank = row[1]
-            cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ?",
-                           (total_time, current_rank, member.id))
+            cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ? AND server_id = ?",
+                           (total_time, current_rank, user_id, server_id))
         conn.commit()
-        logger.debug(f'Timer stopped for user: {member.name}, Duration: {duration}')
+        logger.debug(f'Timer stopped for user: {member.name} in server: {server_id}, Duration: {duration}')
+
 
         # Check if the user has reached the next rank
         if 'current_rank' in locals():
