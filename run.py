@@ -57,9 +57,11 @@ cursor = conn.cursor()
 
 # Create table if it doesn't exist
 cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
-                    user_id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    server_id INTEGER,
                     total_time INTEGER DEFAULT 0,
-                    current_rank INTEGER DEFAULT 0
+                    current_rank INTEGER DEFAULT 0,
+                    PRIMARY KEY (user_id, server_id)
                 )''')
 conn.commit()
 
