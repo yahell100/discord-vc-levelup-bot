@@ -59,6 +59,7 @@ cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
                     user_id INTEGER,
                     server_id INTEGER,
+                    start_time TEXT,
                     total_time INTEGER DEFAULT 0,
                     current_rank INTEGER DEFAULT 0,
                     PRIMARY KEY (user_id, server_id)
@@ -86,6 +87,7 @@ async def on_voice_state_update(member, before, after):
         if not member.bot:
             for guild in bot.guilds:
                 if member.guild == guild:
+                    check_user_exists(member.id, member.guild.id)
                     await start_timer(member)
                     break
 
@@ -97,12 +99,34 @@ async def on_voice_state_update(member, before, after):
                     await stop_timer(member)
                     break
 
+def check_user_exists(user_id, server_id):
+    cursor.execute("SELECT COUNT(*) FROM voice_records WHERE user_id = ? AND server_id = ?", (user_id, server_id))
+    row = cursor.fetchone()
+    if row[0] == 0:
+        cursor.execute("INSERT INTO voice_records (user_id, server_id, start_time, total_time, current_rank) VALUES (?, ?, ?, ?, ?)",
+                       (user_id, server_id, None, 0, 0))
+        conn.commit()
+
 async def start_timer(member):
     server_id = member.guild.id
     user_id = member.id
-    if server_id not in bot.voice_timers:
-        bot.voice_timers[server_id] = {}
-    bot.voice_timers[server_id][user_id] = datetime.datetime.now()
+    start_time = datetime.datetime.now().isoformat()
+    
+    # Check if a record already exists for the user and server
+    cursor.execute("SELECT start_time FROM voice_records WHERE user_id = ? AND server_id = ?",
+                   (user_id, server_id))
+    existing_start_time = cursor.fetchone()
+    
+    if existing_start_time is None:
+        # No existing record, insert a new record
+        cursor.execute("INSERT INTO voice_records (user_id, server_id, start_time, total_time, current_rank) VALUES (?, ?, ?, ?, ?)",
+                       (user_id, server_id, start_time, 0, 0))
+    else:
+        # Existing record, update the start_time
+        cursor.execute("UPDATE voice_records SET start_time = ? WHERE user_id = ? AND server_id = ?",
+                       (start_time, user_id, server_id))
+    
+    conn.commit()
     logger.debug(f'Timer started for user: {member.name} in server: {server_id}')
 
 async def stop_timer(member):
@@ -115,37 +139,39 @@ async def stop_timer(member):
         total_hours = duration.total_seconds() / 3600
 
         # Update the total time and current rank in the database
-        cursor.execute("SELECT total_time, current_rank FROM voice_records WHERE user_id = ? AND server_id = ?",
+        cursor.execute("SELECT start_time, total_time, current_rank FROM voice_records WHERE user_id = ? AND server_id = ?",
                        (user_id, server_id))
         row = cursor.fetchone()
         if row is None:
-            cursor.execute("INSERT INTO voice_records (user_id, server_id, total_time, current_rank) VALUES (?, ?, ?, ?)",
-                           (user_id, server_id, duration.total_seconds(), 0))
-        else:
-            total_time = row[0] + duration.total_seconds()
-            current_rank = row[1]
-            cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ? AND server_id = ?",
-                           (total_time, current_rank, user_id, server_id))
+            # Handle if the record doesn't exist (shouldn't occur)
+            return
+
+        start_time_str = row[0]  # Get the start_time as a string
+        total_time = row[1] + duration.total_seconds()
+        current_rank = row[2]
+        cursor.execute("UPDATE voice_records SET total_time = ?, current_rank = ? WHERE user_id = ? AND server_id = ?",
+                       (total_time, current_rank, user_id, server_id))
         conn.commit()
         logger.debug(f'Timer stopped for user: {member.name} in server: {server_id}, Duration: {duration}')
 
+        # Convert the start_time string back to a datetime object
+        start_time = datetime.datetime.strptime(start_time_str, "%Y-%m-%dT%H:%M:%S.%f")
+        
+        # Calculate the duration using the converted start_time
+        duration = end_time - start_time
+        total_hours = duration.total_seconds() / 3600
 
         # Check if the user has reached the next rank
-        if 'current_rank' in locals():
-            for rank in RANKS:
-                if current_rank < len(RANKS) - 1 and total_hours >= rank['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
-                    next_rank_role = discord.utils.get(member.guild.roles, name=rank['name'])
-                    await member.add_roles(next_rank_role)
-                    cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
-                    conn.commit()
-                    logger.info(f'{member.name} has been promoted to {rank["name"]}')
-                    
-                    if MSG_USER:
-                        await member.send(f'Congratulations, you have been promoted to {rank["name"]}!')
-                        logger.info(f'Notified {member.name} about promotion')
-                    
-                    break
+        if current_rank < len(RANKS) - 1 and total_hours >= RANKS[current_rank]['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
+            next_rank_role = discord.utils.get(member.guild.roles, name=RANKS[current_rank + 1]['name'])
+            await member.add_roles(next_rank_role)
+            cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
+            conn.commit()
+            logger.info(f'{member.name} has been promoted to {RANKS[current_rank + 1]["name"]}')
 
+            if MSG_USER:
+                await member.send(f'Congratulations, you have been promoted to {RANKS[current_rank + 1]["name"]}!')
+                logger.info(f'Notified {member.name} about promotion')
 
 # Initialize the voice_timers dictionary
 bot.voice_timers = {}
