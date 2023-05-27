@@ -384,4 +384,19 @@ async def modify_hours(ctx, user: discord.User, hours: int):
 
     await ctx.send(f'Hours modified for {user.mention}.')
 
+@slash.slash(
+    name="invite",
+    description="Generates an invite link for the bot.",
+    default_permission=False
+)
+async def invite(ctx):
+    permissions = discord.Permissions(
+        manage_roles=True,
+        read_messages=True,
+        send_messages=True
+    )
+    invite_link = discord.utils.oauth_url(ctx.bot.user.id, permissions=permissions)
+    await ctx.author.send(f"Invite link for the bot: {invite_link}")
+    await ctx.send("I've sent you a direct message with the invite link!")
+
 bot.run(TOKEN)
