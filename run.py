@@ -17,10 +17,6 @@ TOKEN = os.getenv('DISCORD_TOKEN', '') or os.getenv('TOKEN', '')
 # Opts to allow bot to send notification about promotion
 MSG_USER = os.getenv('MSG_USER', 'False')
 
-# Get ranks from environment variable or fallback to default ranks
-RANKS = os.getenv('RANKS', '[{"name": "Rank 1", "max_hours": 5}, {"name": "Rank 2", "max_hours": 10}, {"name": "Rank 3", "max_hours": 15}]')
-RANKS = json.loads(RANKS)
-
 # Get the database file name from environment variable or fallback to default name
 DATABASE_FILE = os.getenv('DATABASE_FILE', 'bot.db')
 
@@ -31,7 +27,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Configure logger
 logger = logging.getLogger('discord')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Create a console handler and set its formatter
 console_handler = logging.StreamHandler(sys.stdout)
@@ -64,6 +60,15 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS voice_records (
                     current_rank INTEGER DEFAULT 0,
                     PRIMARY KEY (user_id, server_id)
                 )''')
+
+# Create server_ranks table if it doesn't exist
+cursor.execute('''CREATE TABLE IF NOT EXISTS server_ranks (
+                    server_id INTEGER,
+                    rank_name TEXT,
+                    max_hours INTEGER,
+                    PRIMARY KEY (server_id, rank_name)
+                )''')
+
 conn.commit()
 
 @bot.event
@@ -71,11 +76,8 @@ async def on_ready():
     logger.info(f'Logged in as {bot.user.name}')
 
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name='voice chat'))
-
-    # Log the defined ranks
-    logger.info('Defined ranks:')
-    for rank in RANKS:
-        logger.info(f'Name: {rank["name"]}, Max Hours: {rank["max_hours"]}')
+    prefix = bot.command_prefix
+    logger.info(f"The command prefix is set to: {prefix}")
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -162,21 +164,93 @@ async def stop_timer(member):
         total_hours = duration.total_seconds() / 3600
 
         # Check if the user has reached the next rank
-        if current_rank < len(RANKS) - 1 and total_hours >= RANKS[current_rank]['max_hours'] and total_hours < RANKS[current_rank + 1]['max_hours']:
-            next_rank_role = discord.utils.get(member.guild.roles, name=RANKS[current_rank + 1]['name'])
-            await member.add_roles(next_rank_role)
-            cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ?", (current_rank + 1, member.id))
-            conn.commit()
-            logger.info(f'{member.name} has been promoted to {RANKS[current_rank + 1]["name"]}')
+        cursor.execute("SELECT rank_name, max_hours FROM server_ranks WHERE server_id = ?", (server_id,))
+        ranks = cursor.fetchall()
 
-            if MSG_USER:
-                await member.send(f'Congratulations, you have been promoted to {RANKS[current_rank + 1]["name"]} in {member.guild.name} server!')
-                logger.info(f'Notified {member.name} about promotion')
+        if current_rank < len(ranks) - 1:
+            current_max_hours = ranks[current_rank][1]
+            next_rank_name = ranks[current_rank + 1][0]
+            next_max_hours = ranks[current_rank + 1][1]
+            
+            if total_hours >= current_max_hours and total_hours < next_max_hours:
+                next_rank_role = discord.utils.get(member.guild.roles, name=next_rank_name)
+                await member.add_roles(next_rank_role)
+                cursor.execute("UPDATE voice_records SET current_rank = ? WHERE user_id = ? AND server_id = ?",
+                               (current_rank + 1, user_id, server_id))
+                conn.commit()
+                logger.info(f'{member.name} has been promoted to {next_rank_name} in server: {server_id}')
 
-# Initialize the voice_timers dictionary
-bot.voice_timers = {}
+                if MSG_USER.lower() == 'true':
+                    await member.send(f'Congratulations! You have been promoted to {next_rank_name} in server: {member.guild.name}.')
+
+    else:
+        logger.warning(f'No timer found for user: {member.name} in server: {server_id}')
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def add_rank(ctx, rank_name, max_hours):
+    server_id = ctx.guild.id
+
+    cursor.execute("SELECT COUNT(*) FROM server_ranks WHERE server_id = ? AND rank_name = ?", (server_id, rank_name))
+    row = cursor.fetchone()
+    if row[0] == 0:
+        cursor.execute("INSERT INTO server_ranks (server_id, rank_name, max_hours) VALUES (?, ?, ?)",
+                       (server_id, rank_name, max_hours))
+        conn.commit()
+        logger.info(f'Rank "{rank_name}" added in server: {server_id}')
+        await ctx.send(f'Rank "{rank_name}" added.')
+    else:
+        await ctx.send(f'Rank "{rank_name}" already exists.')
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def remove_rank(ctx, rank_name):
+    server_id = ctx.guild.id
+
+    cursor.execute("SELECT COUNT(*) FROM server_ranks WHERE server_id = ? AND rank_name = ?", (server_id, rank_name))
+    row = cursor.fetchone()
+    if row[0] > 0:
+        cursor.execute("DELETE FROM server_ranks WHERE server_id = ? AND rank_name = ?", (server_id, rank_name))
+        conn.commit()
+        logger.info(f'Rank "{rank_name}" removed from server: {server_id}')
+        await ctx.send(f'Rank "{rank_name}" removed.')
+    else:
+        await ctx.send(f'Rank "{rank_name}" not found.')
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def list_ranks(ctx):
+    server_id = ctx.guild.id
+
+    cursor.execute("SELECT rank_name, max_hours FROM server_ranks WHERE server_id = ?", (server_id,))
+    ranks = cursor.fetchall()
+
+    if len(ranks) > 0:
+        rank_list = '\n'.join([f'{rank[0]}: {rank[1]} hours' for rank in ranks])
+        await ctx.send(f'**Ranks for server {ctx.guild.name}:**\n{rank_list}')
+    else:
+        await ctx.send(f'No ranks found for server {ctx.guild.name}.')
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_hours(ctx, member: discord.Member, hours):
+    server_id = ctx.guild.id
+    user_id = member.id
+
+    cursor.execute("SELECT COUNT(*) FROM voice_records WHERE user_id = ? AND server_id = ?", (user_id, server_id))
+    row = cursor.fetchone()
+    if row[0] > 0:
+        cursor.execute("UPDATE voice_records SET total_time = ? WHERE user_id = ? AND server_id = ?",
+                       (float(hours) * 3600, user_id, server_id))
+        conn.commit()
+        logger.info(f'Total hours set to {hours} for user: {member.name} in server: {server_id}')
+        await ctx.send(f'Total hours set to {hours} for user: {member.mention}.')
+    else:
+        await ctx.send(f'No record found for user: {member.mention} in server: {ctx.guild.name}.')
+
 
 bot.run(TOKEN)
-
-# Close the database connection
-conn.close()
