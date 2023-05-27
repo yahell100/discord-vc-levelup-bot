@@ -353,7 +353,35 @@ async def check_hours(ctx, user: discord.User):
     else:
         await ctx.send(f'No record found for {user.mention}.')
 
-# Initialize the voice_timers dictionary
-bot.voice_timers = {}
+@slash.slash(
+    name="modify_hours",
+    description="Manually modify the hours for a user.",
+    options=[
+        create_option(
+            name="user",
+            description="The user to modify.",
+            option_type=6,
+            required=True
+        ),
+        create_option(
+            name="hours",
+            description="The new hours value.",
+            option_type=4,
+            required=True
+        )
+    ],
+    default_permission=False
+)
+@commands.has_permissions(administrator=True)
+async def modify_hours(ctx, user: discord.User, hours: int):
+    server_id = ctx.guild.id
+    user_id = user.id
+
+    cursor.execute("UPDATE voice_records SET total_time = ? WHERE user_id = ? AND server_id = ?",
+                   (hours * 3600, user_id, server_id))
+    conn.commit()
+    logger.info(f'Hours modified for user: {user.name} in server: {server_id}')
+
+    await ctx.send(f'Hours modified for {user.mention}.')
 
 bot.run(TOKEN)
