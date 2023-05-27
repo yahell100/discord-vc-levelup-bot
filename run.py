@@ -325,6 +325,34 @@ async def promote_user(ctx, user: discord.User):
     else:
         await ctx.send(f'{user.mention} is not recorded in the voice activity.')
 
+@slash.slash(
+    name="check_hours",
+    description="Checks the total number of voice chat hours for a user.",
+    options=[
+        create_option(
+            name="user",
+            description="The user to check.",
+            option_type=6,
+            required=True
+        )
+    ],
+    default_permission=True
+)
+async def check_hours(ctx, user: discord.User):
+    server_id = ctx.guild.id
+    user_id = user.id
+
+    cursor.execute("SELECT total_time FROM voice_records WHERE user_id = ? AND server_id = ?", 
+                   (user_id, server_id))
+    row = cursor.fetchone()
+
+    if row is not None:
+        total_time = row[0]
+        total_hours = total_time / 3600  # convert seconds to hours
+        await ctx.send(f'{user.mention} has spent {total_hours:.2f} hours in voice chats.')
+    else:
+        await ctx.send(f'No record found for {user.mention}.')
+
 # Initialize the voice_timers dictionary
 bot.voice_timers = {}
 
