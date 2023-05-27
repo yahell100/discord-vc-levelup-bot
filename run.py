@@ -170,7 +170,7 @@ async def stop_timer(member):
             logger.info(f'{member.name} has been promoted to {RANKS[current_rank + 1]["name"]}')
 
             if MSG_USER:
-                await member.send(f'Congratulations, you have been promoted to {RANKS[current_rank + 1]["name"]}!')
+                await member.send(f'Congratulations, you have been promoted to {RANKS[current_rank + 1]["name"]} in {member.guild.name} server!')
                 logger.info(f'Notified {member.name} about promotion')
 
 # Initialize the voice_timers dictionary
