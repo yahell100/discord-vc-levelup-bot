@@ -105,10 +105,10 @@ async def on_voice_state_update(member, before, after):
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandError):
         # Handle command errors
-        await ctx.author.send(f"An error occurred while executing the command '{ctx.command}': {str(error)}")
+        await ctx.send(f"An error occurred while executing the command '{ctx.command}': {str(error)}", hidden=True)
     elif isinstance(error, commands.MissingPermissions):
         # Handle missing permissions errors
-        await ctx.author.send("You do not have permission to use this command.")
+        await ctx.send("You do not have permission to use this command.", hidden=True)
     else:
         # Handle other errors
         logger.info(f"Error occurred while executing the command '{ctx.command}': {repr(error)}")
@@ -234,9 +234,9 @@ async def add_rank(ctx, rank_name: str, max_hours: int):
                        (server_id, rank_name, max_hours))
         conn.commit()
         logger.info(f'Rank "{rank_name}" added in server: {server_id}')
-        await ctx.send(f'Rank "{rank_name}" added.')
+        await ctx.send(f'Rank "{rank_name}" added.', hidden=True)
     else:
-        await ctx.send(f'Rank "{rank_name}" already exists.')
+        await ctx.send(f'Rank "{rank_name}" already exists.', hidden=True)
 
 
 @slash.slash(
@@ -262,9 +262,9 @@ async def remove_rank(ctx, rank_name: str):
         cursor.execute("DELETE FROM server_ranks WHERE server_id = ? AND rank_name = ?", (server_id, rank_name))
         conn.commit()
         logger.info(f'Rank "{rank_name}" removed from server: {server_id}')
-        await ctx.send(f'Rank "{rank_name}" removed.')
+        await ctx.send(f'Rank "{rank_name}" removed.', hidden=True)
     else:
-        await ctx.send(f'Rank "{rank_name}" not found.')
+        await ctx.send(f'Rank "{rank_name}" not found.', hidden=True)
 
 
 @slash.slash(
@@ -281,9 +281,9 @@ async def list_ranks(ctx):
 
     if len(ranks) > 0:
         rank_list = '\n'.join([f'{rank[0]}: {rank[1]} hours' for rank in ranks])
-        await ctx.send(f'**Ranks for server {ctx.guild.name}:**\n{rank_list}')
+        await ctx.send(f'**Ranks for server {ctx.guild.name}:**\n{rank_list}', hidden=True)
     else:
-        await ctx.send(f'No ranks found for server {ctx.guild.name}.')
+        await ctx.send(f'No ranks found for server {ctx.guild.name}.', hidden=True)
 
 
 @slash.slash(
@@ -328,13 +328,13 @@ async def promote_user(ctx, user: discord.User):
                                (current_rank + 1, user_id, server_id))
                 conn.commit()
                 logger.info(f'{user.name} has been promoted to {next_rank_name} in server: {server_id}')
-                await ctx.author.send(f'{user.mention} has been promoted to {next_rank_name} in server: {ctx.guild.name}.')
+                await ctx.send(f'{user.mention} has been promoted to {next_rank_name} in server: {ctx.guild.name}.', hidden=True)
             else:
-                await ctx.author.send(f'{user.mention} has not reached the required hours for promotion in server: {ctx.guild.name}.')
+                await ctx.send(f'{user.mention} has not reached the required hours for promotion in server: {ctx.guild.name}.', hidden=True)
         else:
-            await ctx.author.send(f'{user.mention} is already at the highest rank in server: {ctx.guild.name}.')
+            await ctx.send(f'{user.mention} is already at the highest rank in server: {ctx.guild.name}.', hidden=True)
     else:
-        await ctx.author.send(f'{user.mention} is not recorded in the voice activity in server {ctx.guild.name}.')
+        await ctx.send(f'{user.mention} is not recorded in the voice activity in server {ctx.guild.name}.', hidden=True)
 
 @slash.slash(
     name="check_hours",
@@ -360,9 +360,9 @@ async def check_hours(ctx, user: discord.User):
     if row is not None:
         total_time = row[0]
         total_hours = total_time / 3600  # convert seconds to hours
-        await ctx.author.send(f'{user.mention} has spent {total_hours:.2f} hours in voice chats.')
+        await ctx.send(f'{user.mention} has spent {total_hours:.2f} hours in voice chats.', hidden=True)
     else:
-        await ctx.author.send(f'No record found for {user.mention}.')
+        await ctx.send(f'No record found for {user.mention}.', hidden=True)
 
 @slash.slash(
     name="modify_hours",
@@ -393,7 +393,7 @@ async def modify_hours(ctx, user: discord.User, hours: int):
     conn.commit()
     logger.info(f'Hours modified for user: {user.name} in server: {server_id}')
 
-    await ctx.author.send(f'Hours modified for {user.mention}.')
+    await ctx.send(f'Hours modified for {user.mention}.', hidden=True)
 
 @slash.slash(
     name="invite",
@@ -408,6 +408,6 @@ async def invite(ctx):
     )
     invite_link = discord.utils.oauth_url(ctx.bot.user.id, permissions=permissions)
     await ctx.author.send(f"Invite link for the bot: {invite_link}")
-    await ctx.send("I've sent you a direct message with the invite link!")
+    await ctx.send("I've sent you a direct message with the invite link!", hidden=True)
 
 bot.run(TOKEN)
